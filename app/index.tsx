@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
-import { View, Text, Image, StyleSheet, FlatList, Dimensions } from 'react-native';
-
+import { View, Text, Image, StyleSheet, FlatList, Dimensions, TouchableOpacity } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
+import { router } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
@@ -25,8 +26,9 @@ const onboardingData = [
 export default function OnboardingScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef(null);
+  const navigation = useNavigation();
 
-  const handleScroll = (event) => {
+  const handleScroll = (event: any) => {
     const slideIndex = Math.round(event.nativeEvent.contentOffset.x / width);
     setCurrentIndex(slideIndex);
   };
@@ -41,15 +43,17 @@ export default function OnboardingScreen() {
         showsHorizontalScrollIndicator={false}
         keyExtractor={(_, index) => index.toString()}
         renderItem={({ item, index }) => (
-          <View
-            style={[
-              styles.container,
-              index === 0 && { marginBottom: 30 }, // Apply marginTop only for the first screen
-            ]}
-          >
+          <View style={styles.container}>
             <Text style={styles.title}>{item.title}</Text>
             <Image source={item.image} style={styles.image} />
             <Text style={styles.description}>{item.description}</Text>
+
+            {/* Show button only on the last slide */}
+            {index === onboardingData.length - 1 && (
+                <TouchableOpacity style={styles.button} onPress={() => router.push("/login")}>
+                <Text style={styles.buttonText}>Login →</Text>
+              </TouchableOpacity>
+            )}
           </View>
         )}
         onScroll={handleScroll}
@@ -78,7 +82,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#121212',
   },
   container: {
-    width, // Takes full width for each screen
+    width,
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
@@ -129,5 +133,16 @@ const styles = StyleSheet.create({
   inactiveDot: {
     backgroundColor: 'gray',
   },
+  button: {
+    backgroundColor: '#6200EE',
+    paddingVertical: 12,
+    paddingHorizontal: 32,
+    borderRadius: 8,
+    marginTop: 20,
+  },
+  buttonText: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });
-

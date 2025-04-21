@@ -1,0 +1,205 @@
+import React from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
+import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
+
+const HomeScreen = () => {
+  return (
+    <View style={styles.container}>
+      {/* Header */}
+      <View style={styles.header}>
+        <View style={styles.userInfo}>
+          <Image
+            source={{ uri: 'https://placehold.co/50x50' }}
+            style={styles.avatar}
+          />
+          <View>
+            <Text style={styles.greeting}>Hello!</Text>
+            <Text style={styles.username}>John Doe</Text>
+          </View>
+        </View>
+        <TouchableOpacity>
+          <Ionicons name="notifications-outline" size={24} color="white" />
+          <View style={styles.badge} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Task Highlight */}
+      <View style={styles.highlightCard}>
+        <Text style={styles.highlightText}>Your today’s task is almost done!</Text>
+        <TouchableOpacity style={styles.viewTaskButton}>
+          <Text style={styles.viewTaskText}>View Task</Text>
+        </TouchableOpacity>
+      </View>
+
+      {/* In Progress */}
+      <Text style={styles.sectionTitle}>In <Text style={styles.bold}>Progress</Text> <Text style={styles.count}>4</Text></Text>
+      <View style={styles.projectRow}>
+        <View style={styles.projectCard}>
+          <Text style={styles.projectTitle}>Office Project</Text>
+          <View style={styles.progressBar} />
+        </View>
+        <View style={styles.projectCard}>
+          <Text style={styles.projectTitle}>Personal Project</Text>
+          <View style={styles.progressBar} />
+        </View>
+      </View>
+
+      {/* Task Groups */}
+      <Text style={styles.sectionTitle}>Task Groups <Text style={styles.count}>6</Text></Text>
+      <View style={styles.group}>
+        <FontAwesome5 name="briefcase" size={24} color="#6A5ACD" />
+        <View style={styles.groupInfo}>
+          <Text style={styles.groupTitle}>Office Project</Text>
+          <Text style={styles.groupSub}>23 assigned task</Text>
+        </View>
+      </View>
+      <View style={styles.group}>
+        <MaterialCommunityIcons name="notebook" size={24} color="#6A5ACD" />
+        <View style={styles.groupInfo}>
+          <Text style={styles.groupTitle}>Personal Project</Text>
+          <Text style={styles.groupSub}>30 assigned task</Text>
+        </View>
+      </View>
+    </View>
+  );
+};
+
+export default HomeScreen;
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#0D0C0F',
+    paddingHorizontal: 20,
+    paddingTop: 40,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  userInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatar: {
+    height: 50,
+    width: 50,
+    borderRadius: 25,
+    marginRight: 12,
+  },
+  greeting: {
+    color: '#FFF',
+    fontSize: 14,
+  },
+  username: {
+    color: '#FFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  badge: {
+    position: 'absolute',
+    top: -4,
+    right: -4,
+    width: 10,
+    height: 10,
+    backgroundColor: 'red',
+    borderRadius: 5,
+  },
+  highlightCard: {
+    backgroundColor: '#6A5ACD',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 24,
+  },
+  highlightText: {
+    color: '#FFF',
+    fontSize: 16,
+    marginBottom: 12,
+  },
+  viewTaskButton: {
+    backgroundColor: '#EDEDED',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+  },
+  viewTaskText: {
+    color: '#000',
+    fontWeight: '600',
+  },
+  sectionTitle: {
+    color: '#FFF',
+    fontSize: 16,
+    marginBottom: 8,
+  },
+  bold: {
+    fontWeight: 'bold',
+  },
+  count: {
+    color: '#6A5ACD',
+    fontWeight: 'bold',
+  },
+  projectRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  projectCard: {
+    backgroundColor: '#FFF',
+    borderRadius: 12,
+    width: '48%',
+    padding: 16,
+    justifyContent: 'space-between',
+  },
+  projectTitle: {
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  progressBar: {
+    height: 4,
+    backgroundColor: 'red',
+    borderRadius: 2,
+  },
+  group: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A1A1F',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 12,
+  },
+  groupInfo: {
+    marginLeft: 12,
+  },
+  groupTitle: {
+    color: '#FFF',
+    fontWeight: 'bold',
+  },
+  groupSub: {
+    color: '#999',
+    fontSize: 12,
+  },
+  bottomTabs: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: '#1A1A1F',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    alignItems: 'center',
+  },
+  addButton: {
+    backgroundColor: '#0D0C0F',
+    padding: 12,
+    borderRadius: 28,
+    marginTop: -30,
+    borderWidth: 2,
+    borderColor: '#1A1A1F',
+  },
+});
