@@ -9,7 +9,7 @@ const HomeScreen = () => {
       <View style={styles.header}>
         <View style={styles.userInfo}>
           <Image
-            source={{ uri: 'https://placehold.co/50x50' }}
+            source={require('@/assets/images/tip.png')}
             style={styles.avatar}
           />
           <View>
@@ -90,12 +90,13 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   greeting: {
+    fontFamily: 'PlusJakartaSans_Regular',
     color: '#FFF',
     fontSize: 14,
   },
   username: {
+    fontFamily: 'PlusJakartaSans_Bold',
     color: '#FFF',
-    fontWeight: 'bold',
     fontSize: 16,
   },
   badge: {
@@ -114,6 +115,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   highlightText: {
+    fontFamily: 'PlusJakartaSans_Regular',
     color: '#FFF',
     fontSize: 16,
     marginBottom: 12,
@@ -126,20 +128,22 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-start',
   },
   viewTaskText: {
+    fontFamily: 'PlusJakartaSans_Bold',
     color: '#000',
     fontWeight: '600',
   },
   sectionTitle: {
+    fontFamily: 'PlusJakartaSans_Regular',
     color: '#FFF',
     fontSize: 16,
     marginBottom: 8,
   },
   bold: {
-    fontWeight: 'bold',
+    fontFamily: 'PlusJakartaSans_Bold',
   },
   count: {
     color: '#6A5ACD',
-    fontWeight: 'bold',
+    fontFamily: 'PlusJakartaSans_Bold',
   },
   projectRow: {
     flexDirection: 'row',
@@ -154,7 +158,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   projectTitle: {
-    fontWeight: 'bold',
+    fontFamily: 'PlusJakartaSans_Bold',
     marginBottom: 10,
   },
   progressBar: {
@@ -175,9 +179,10 @@ const styles = StyleSheet.create({
   },
   groupTitle: {
     color: '#FFF',
-    fontWeight: 'bold',
+    fontFamily: 'PlusJakartaSans_Bold',
   },
   groupSub: {
+    fontFamily: 'PlusJakartaSans_Regular',
     color: '#999',
     fontSize: 12,
   },

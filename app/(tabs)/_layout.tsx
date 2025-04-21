@@ -28,7 +28,7 @@ export default function TabsLayout() {
               iconName = 'add-circle-outline';
               break;
             case 'task':
-              iconName = 'chatbox-ellipses-outline';
+              iconName = 'document-outline';
               break;
             case 'profile':
               iconName = 'people-outline';
