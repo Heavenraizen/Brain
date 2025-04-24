@@ -1,6 +1,10 @@
 import React, { useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
-import { useRouter,router } from 'expo-router';
+import { useRouter } from 'expo-router';
+import { Ionicons, FontAwesome } from '@expo/vector-icons';
+import { FIREBASE_AUTH, FIRESTORE_DB} from '@/FirebaseConfig';
+import { doc, setDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import {
   View,
   Text,
@@ -8,21 +12,65 @@ import {
   TouchableOpacity,
   StyleSheet,
   SafeAreaView,
+  ActivityIndicator
 } from 'react-native';
-import { Ionicons, FontAwesome } from '@expo/vector-icons';
 
 export default function AuthScreen() {
+  {/* States */}
   const [activeTab, setActiveTab] = useState('login');
   const [secureText, setSecureText] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  {/* Navigation */}
   const navigation = useNavigation();
   const otit = useRouter();
-  const handlePress = () => {
-    otit.push('/home');
+
+  {/* Firebase */}
+  const auth = FIREBASE_AUTH;
+
+  {/* Sign In and Sign up */}
+  const signIn = async () => {
+    setLoading(true);
+    try{
+      const response = await signInWithEmailAndPassword(auth,email,password);
+      console.log(response);
+      otit.push('/home');
+    } catch (error: any) {
+      console.log(error);
+      alert('Sign in failed:' + error.message)
+    } finally{
+      setLoading(false);
+    }
   }
 
+  const signUp = async () => {
+    setLoading(true);
+    try{
+      const response = await createUserWithEmailAndPassword(auth,email,password);
+      const user = response.user;
+      await updateProfile(user, {
+        displayName: name,
+      });
+
+      //set name in database
+      await setDoc(doc(FIRESTORE_DB, 'users', user.uid), {
+        displayName: name,
+        email: email,
+        createdAt: new Date(),
+      });
+
+      console.log('User signed up successfully:', user.displayName);
+      setActiveTab('login');
+    } catch (error: any) {
+      console.log(error);
+      alert('Sign up failed:' + error.message)  
+    } finally{
+      setLoading(false);
+    }
+  }
   const renderLoginForm = () => (
     <>
       <Text style={styles.label}>Email</Text>
@@ -53,7 +101,7 @@ export default function AuthScreen() {
           <Ionicons
             name={secureText ? 'eye-off' : 'eye'}
             size={20}
-            color="#1DCD9F"
+            color="#609AFF"
           />
         </TouchableOpacity>
       </View>
@@ -62,8 +110,12 @@ export default function AuthScreen() {
         <Text style={styles.forgot}>Forgot password?</Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.loginButton}onPress={handlePress}>
-        <Text style={styles.loginText}>Log in</Text>
+      <TouchableOpacity style={styles.loginButton}onPress={signIn} disabled={loading}>
+        {loading ? (
+          <ActivityIndicator color="#FFF" />
+        ) : (
+          <Text style={styles.loginText}>Log in</Text>
+        )}
       </TouchableOpacity>
 
       <Text style={styles.or}>or</Text>
@@ -113,14 +165,19 @@ export default function AuthScreen() {
           <Ionicons
             name={secureText ? 'eye-off' : 'eye'}
             size={20}
-            color="#1DCD9F"
+            color="#609AFF"
           />
         </TouchableOpacity>
       </View>
 
-      <TouchableOpacity style={styles.loginButton}>
-        <Text style={styles.loginText}>Sign up</Text>
+      <TouchableOpacity style={styles.loginButton} onPress={signUp} disabled={loading}>
+        {loading ? (
+          <ActivityIndicator color="#FFF" />
+        ) : (
+          <Text style={styles.loginText}>Sign up</Text>
+        )}
       </TouchableOpacity>
+
     </>
   );
 
@@ -139,7 +196,7 @@ export default function AuthScreen() {
             <TouchableOpacity
               style={[
                 styles.tab,
-                activeTab === 'login' && styles.activeTab,
+                activeTab === 'login' && styles.activeTabLeft,
               ]}
               onPress={() => setActiveTab('login')}>
               <Text
@@ -154,7 +211,7 @@ export default function AuthScreen() {
             <TouchableOpacity
               style={[
                 styles.tab,
-                activeTab === 'signup' && styles.activeTab,
+                activeTab === 'signup' && styles.activeTabRight,
               ]}
               onPress={() => setActiveTab('signup')}>
               <Text
@@ -166,8 +223,9 @@ export default function AuthScreen() {
               </Text>
             </TouchableOpacity>
           </View>
-
-          {activeTab === 'login' ? renderLoginForm() : renderSignupForm()}
+          <View style={{ opacity: loading ? 0.5 : 1 }}>
+            {activeTab === 'login' ? renderLoginForm() : renderSignupForm()}
+          </View>
         </View>
       </View>
     </SafeAreaView>
@@ -177,7 +235,7 @@ export default function AuthScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#000000',
+    backgroundColor: '#121212',
     padding: 16,
   },
   backButton: {
@@ -216,15 +274,26 @@ const styles = StyleSheet.create({
     padding: 10,
     alignItems: 'center',
   },
-  activeTab: {
-    backgroundColor: '#1DCD9F',
+  activeTabLeft: {
+    backgroundColor: '#609AFF',
+    borderTopLeftRadius: 7,
+    borderTopRightRadius: 0,
+    borderBottomLeftRadius: 7,
+    borderBottomRightRadius: 0,
+  },
+  activeTabRight: {
+    backgroundColor: '#609AFF',
+    borderTopLeftRadius: 0,
+    borderTopRightRadius: 7,
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 7,
   },
   tabText: {
     color: '#FFF',
     fontWeight: '600',
   },
   activeTabText: {
-    color: '#000',
+    color: 'white',
   },
   label: {
     color: '#FFF',
@@ -254,14 +323,14 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   loginButton: {
-    backgroundColor: '#1DCD9F',
+    backgroundColor: '#609AFF',
     paddingVertical: 12,
     borderRadius: 6,
     alignItems: 'center',
     marginTop: 12,
   },
   loginText: {
-    color: '#000',
+    color: 'white',
     fontWeight: 'bold',
   },
   or: {
@@ -271,7 +340,7 @@ const styles = StyleSheet.create({
   },
   googleButton: {
     flexDirection: 'row',
-    backgroundColor: '#222',
+    backgroundColor: '#121212',
     paddingVertical: 12,
     borderRadius: 6,
     justifyContent: 'center',
