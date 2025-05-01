@@ -2,7 +2,12 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
 
+import { useAuth } from '@/context/AuthContext';
+
+
 const HomeScreen = () => {
+  const { authUser } = useAuth();
+
   return (
     <View style={styles.container}>
       {/* Header */}
@@ -14,7 +19,9 @@ const HomeScreen = () => {
           />
           <View>
             <Text style={styles.greeting}>Hello!</Text>
-            <Text style={styles.username}>John Doe</Text>
+            <Text style={styles.username}>
+              {authUser?.displayName || 'Guest'}
+            </Text>
           </View>
         </View>
         <TouchableOpacity>

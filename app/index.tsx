@@ -1,7 +1,8 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { View, Text, Image, StyleSheet, FlatList, Dimensions, TouchableOpacity } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { router } from 'expo-router';
+import { useAuth } from '@/context/AuthContext'; // import your AuthContext
 
 const { width } = Dimensions.get('window');
 
@@ -27,11 +28,24 @@ export default function OnboardingScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef(null);
   const navigation = useNavigation();
+  const { authUser, authLoading } = useAuth(); // get the auth user from context
 
   const handleScroll = (event: any) => {
     const slideIndex = Math.round(event.nativeEvent.contentOffset.x / width);
     setCurrentIndex(slideIndex);
   };
+
+  useEffect(() => {
+    // If user is authenticated, skip the onboarding screen
+    if (authUser) {
+      router.replace('/home'); // Redirect to home if logged in
+    }
+  }, [authUser]); // Trigger on user login state change
+
+  // Show loading spinner while checking the auth state
+  if (authLoading) {
+    return <View><Text>Loading...</Text></View>; // Or show a spinner/loading animation
+  }
 
   return (
     <View style={styles.body}>
@@ -49,8 +63,8 @@ export default function OnboardingScreen() {
             <Text style={styles.description}>{item.description}</Text>
 
             {/* Show button only on the last slide */}
-            {index === onboardingData.length - 1 && (
-                <TouchableOpacity style={styles.button} onPress={() => router.push("/login")}>
+            {index === onboardingData.length - 1 && !authUser && (
+              <TouchableOpacity style={styles.button} onPress={() => router.push("/login")}>
                 <Text style={styles.buttonText}>Login →</Text>
               </TouchableOpacity>
             )}
@@ -65,10 +79,7 @@ export default function OnboardingScreen() {
         {onboardingData.map((_, index) => (
           <View
             key={index}
-            style={[
-              styles.dot,
-              currentIndex === index ? styles.activeDot : styles.inactiveDot,
-            ]}
+            style={[styles.dot, currentIndex === index ? styles.activeDot : styles.inactiveDot]}
           />
         ))}
       </View>
