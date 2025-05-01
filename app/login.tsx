@@ -37,10 +37,13 @@ export default function AuthScreen() {
     try{
       const response = await signInWithEmailAndPassword(auth,email,password);
       console.log(response);
-      otit.push('/home');
+      otit.replace('/(tabs)/home');
     } catch (error: any) {
       console.log(error);
       alert('Sign in failed:' + error.message)
+      setEmail('');
+      setPassword('');
+      setName('');
     } finally{
       setLoading(false);
     }
@@ -63,7 +66,14 @@ export default function AuthScreen() {
       });
 
       console.log('User signed up successfully:', user.displayName);
+
+      await auth.signOut();
+      
       setActiveTab('login');
+      
+      setEmail('');
+      setPassword('');
+      setName('');
     } catch (error: any) {
       console.log(error);
       alert('Sign up failed:' + error.message)  

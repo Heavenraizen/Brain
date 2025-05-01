@@ -27,8 +27,15 @@ const onboardingData = [
 export default function OnboardingScreen() {
   const [currentIndex, setCurrentIndex] = useState(0);
   const flatListRef = useRef(null);
-  const navigation = useNavigation();
-  const { authUser, authLoading } = useAuth(); // get the auth user from context
+  const { authUser, authLoading } = useAuth(); 
+
+  useEffect(() => {
+    if (!authUser) {
+      console.log('User is NOT logged in');
+    } else {
+      console.log('User IS logged in:', authUser);
+    }
+  }, [authUser]);
 
   const handleScroll = (event: any) => {
     const slideIndex = Math.round(event.nativeEvent.contentOffset.x / width);

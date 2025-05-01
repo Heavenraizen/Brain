@@ -16,7 +16,6 @@ export default function TabsLayout() {
         },
         tabBarIcon: ({ focused, color, size }) => {
           let iconName: any;
-
           switch (route.name) {
             case 'home':
               iconName = 'home';
@@ -34,7 +33,6 @@ export default function TabsLayout() {
               iconName = 'people-outline';
               break;
           }
-
           return (
             <Ionicons
               name={iconName}

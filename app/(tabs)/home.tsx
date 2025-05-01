@@ -1,12 +1,35 @@
-import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Image } from 'react-native';
-import { Ionicons, MaterialCommunityIcons, FontAwesome5 } from '@expo/vector-icons';
-
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+} from 'react-native';
+import {
+  Ionicons,
+  MaterialCommunityIcons,
+  FontAwesome5,
+} from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
+import { useFocusEffect } from '@react-navigation/native';
 
-
-const HomeScreen = () => {
+export default function HomeScreen() {
   const { authUser } = useAuth();
+
+  // Local state for displayName & photoURL
+  const [displayName, setDisplayName] = useState(
+    authUser?.displayName || 'Guest'
+  );
+  const [photoURL, setPhotoURL] = useState(authUser?.photoURL || '');
+
+  // Sync from context every time this screen gains focus
+  useFocusEffect(
+    useCallback(() => {
+      setDisplayName(authUser?.displayName || 'Guest');
+      setPhotoURL(authUser?.photoURL || '');
+    }, [authUser])
+  );
 
   return (
     <View style={styles.container}>
@@ -14,14 +37,14 @@ const HomeScreen = () => {
       <View style={styles.header}>
         <View style={styles.userInfo}>
           <Image
-            source={require('@/assets/images/tip.png')}
+            source={
+              photoURL ? { uri: photoURL } : require('@/assets/images/profile.webp')
+            }
             style={styles.avatar}
           />
           <View>
             <Text style={styles.greeting}>Hello!</Text>
-            <Text style={styles.username}>
-              {authUser?.displayName || 'Guest'}
-            </Text>
+            <Text style={styles.username}>{displayName}</Text>
           </View>
         </View>
         <TouchableOpacity>
@@ -32,14 +55,19 @@ const HomeScreen = () => {
 
       {/* Task Highlight */}
       <View style={styles.highlightCard}>
-        <Text style={styles.highlightText}>Your today’s task is almost done!</Text>
+        <Text style={styles.highlightText}>
+          Your today’s task is almost done!
+        </Text>
         <TouchableOpacity style={styles.viewTaskButton}>
           <Text style={styles.viewTaskText}>View Task</Text>
         </TouchableOpacity>
       </View>
 
       {/* In Progress */}
-      <Text style={styles.sectionTitle}>In <Text style={styles.bold}>Progress</Text> <Text style={styles.count}>4</Text></Text>
+      <Text style={styles.sectionTitle}>
+        In <Text style={styles.bold}>Progress</Text>{' '}
+        <Text style={styles.count}>4</Text>
+      </Text>
       <View style={styles.projectRow}>
         <View style={styles.projectCard}>
           <Text style={styles.projectTitle}>Office Project</Text>
@@ -52,7 +80,9 @@ const HomeScreen = () => {
       </View>
 
       {/* Task Groups */}
-      <Text style={styles.sectionTitle}>Task Groups <Text style={styles.count}>6</Text></Text>
+      <Text style={styles.sectionTitle}>
+        Task Groups <Text style={styles.count}>6</Text>
+      </Text>
       <View style={styles.group}>
         <FontAwesome5 name="briefcase" size={24} color="#6A5ACD" />
         <View style={styles.groupInfo}>
@@ -69,9 +99,7 @@ const HomeScreen = () => {
       </View>
     </View>
   );
-};
-
-export default HomeScreen;
+}
 
 const styles = StyleSheet.create({
   container: {
@@ -192,26 +220,5 @@ const styles = StyleSheet.create({
     fontFamily: 'PlusJakartaSans_Regular',
     color: '#999',
     fontSize: 12,
-  },
-  bottomTabs: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#1A1A1F',
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingVertical: 12,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    alignItems: 'center',
-  },
-  addButton: {
-    backgroundColor: '#0D0C0F',
-    padding: 12,
-    borderRadius: 28,
-    marginTop: -30,
-    borderWidth: 2,
-    borderColor: '#1A1A1F',
   },
 });
