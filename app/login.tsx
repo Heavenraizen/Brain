@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigation } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import { Ionicons, FontAwesome } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { FIREBASE_AUTH, FIRESTORE_DB} from '@/FirebaseConfig';
 import { doc, setDoc } from 'firebase/firestore';
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, updateProfile } from 'firebase/auth';
@@ -111,7 +111,7 @@ export default function AuthScreen() {
           <Ionicons
             name={secureText ? 'eye-off' : 'eye'}
             size={20}
-            color="#609AFF"
+            color="#6A5ACD"
           />
         </TouchableOpacity>
       </View>
@@ -126,13 +126,6 @@ export default function AuthScreen() {
         ) : (
           <Text style={styles.loginText}>Log in</Text>
         )}
-      </TouchableOpacity>
-
-      <Text style={styles.or}>or</Text>
-
-      <TouchableOpacity style={styles.googleButton}>
-        <FontAwesome name="google" size={20} color="#FFF" />
-        <Text style={styles.googleText}>Sign in with Google</Text>
       </TouchableOpacity>
     </>
   );
@@ -175,7 +168,7 @@ export default function AuthScreen() {
           <Ionicons
             name={secureText ? 'eye-off' : 'eye'}
             size={20}
-            color="#609AFF"
+            color="#6A5ACD"
           />
         </TouchableOpacity>
       </View>
@@ -285,14 +278,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   activeTabLeft: {
-    backgroundColor: '#609AFF',
+    backgroundColor: '#6A5ACD',
     borderTopLeftRadius: 7,
     borderTopRightRadius: 0,
     borderBottomLeftRadius: 7,
     borderBottomRightRadius: 0,
   },
   activeTabRight: {
-    backgroundColor: '#609AFF',
+    backgroundColor: '#6A5ACD',
     borderTopLeftRadius: 0,
     borderTopRightRadius: 7,
     borderBottomLeftRadius: 0,
@@ -333,7 +326,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   loginButton: {
-    backgroundColor: '#609AFF',
+    backgroundColor: '#6A5ACD',
     paddingVertical: 12,
     borderRadius: 6,
     alignItems: 'center',
@@ -343,23 +336,5 @@ const styles = StyleSheet.create({
     color: 'white',
     fontWeight: 'bold',
   },
-  or: {
-    textAlign: 'center',
-    color: '#FFF',
-    marginVertical: 12,
-  },
-  googleButton: {
-    flexDirection: 'row',
-    backgroundColor: '#121212',
-    paddingVertical: 12,
-    borderRadius: 6,
-    justifyContent: 'center',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: '#555',
-  },
-  googleText: {
-    color: '#FFF',
-  },
-});
+ }
+);

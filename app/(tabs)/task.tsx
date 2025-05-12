@@ -1,6 +1,4 @@
-// task.tsx (Firebase-integrated version)
 import React, { useState, useEffect } from 'react';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -63,8 +61,6 @@ const AssignmentsScreen = () => {
     underline: false,
   });
   const [reminderDate, setReminderDate] = useState(new Date());
-  const insets = useSafeAreaInsets();
-
   
   // Temporary input states for date/time entries
   const [monthInput, setMonthInput] = useState('');
@@ -413,10 +409,7 @@ const renderItem = ({ item }: { item: Assignment }) => (
           </TouchableOpacity>
         </View>
 
-        <ScrollView
-          style={styles.detailContent}
-          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
-        >
+        <ScrollView style={styles.detailContent}>
           <Text style={styles.detailTitle}>{currentAssignment.title}</Text>
           
           {currentAssignment.reminderDate && (
@@ -519,9 +512,7 @@ const renderItem = ({ item }: { item: Assignment }) => (
             
             {/* Floating Share Button */}
             <TouchableOpacity 
-              style={[styles.floatingShareButton,
-                { bottom: insets.bottom + 20 },
-              ]}
+              style={styles.floatingShareButton}
               onPress={handleShareAssignment}
             >
               <Icon name="share-social-outline" size={24} color="#FFF" />
@@ -1078,9 +1069,9 @@ const styles = StyleSheet.create({
   contentInput: {
     backgroundColor: '#222',
     color: 'white',
-    borderRadius: 8,
-    padding: 16,
-    minHeight: 550,
+    borderRadius: 6,
+    padding: 12,
+    minHeight: 100,
     textAlignVertical: 'top',
     flex: 1,
   },
