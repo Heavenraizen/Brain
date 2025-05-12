@@ -1,3 +1,4 @@
+// task.tsx (Firebase-integrated version)
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -17,6 +18,16 @@ import {
 } from 'react-native';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '@/context/AuthContext';
+import { FIRESTORE_DB } from '@/FirebaseConfig';
+import {
+  collection,
+  doc,
+  onSnapshot,
+  setDoc,
+  updateDoc,
+  deleteDoc,
+} from 'firebase/firestore';
 
 type Assignment = {
   id: string;
@@ -32,6 +43,7 @@ type Assignment = {
 };
 
 const AssignmentsScreen = () => {
+  const { authUser } = useAuth();
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [counter, setCounter] = useState(1);
   const [selectedAssignment, setSelectedAssignment] = useState<Assignment | null>(null);
@@ -92,36 +104,34 @@ const AssignmentsScreen = () => {
   ];
 
   // Initialize input fields when modal opens
-  useEffect(() => {
-    if (reminderModalVisible) {
-      setMonthInput(month.toString());
-      setDayInput(day.toString());
-      setYearInput(year.toString());
-      setHourInput(hour.toString().padStart(2, '0'));
-      setMinuteInput(minute.toString().padStart(2, '0'));
-    }
-  }, [reminderModalVisible]);
+   useEffect(() => {
+    if (!authUser) return;
+    const userAssignmentsRef = collection(FIRESTORE_DB, 'users', authUser.uid, 'assignments');
+    const unsubscribe = onSnapshot(userAssignmentsRef, (snapshot) => {
+      const data: Assignment[] = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as Assignment[];
+      setAssignments(data);
+    });
+    return unsubscribe;
+  }, [authUser]);
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
+    if (!authUser) return;
+    const id = Date.now().toString();
     const newAssignment: Assignment = {
-      id: counter.toString(),
+      id,
       title: `New Assignment ${counter}`,
       content: '',
       textAlign: 'left',
-      textFormat: {
-        bold: false,
-        italic: false,
-        underline: false,
-      },
-      reminderDate: null
+      textFormat: { bold: false, italic: false, underline: false },
+      reminderDate: null,
     };
-    setAssignments([...assignments, newAssignment]);
+    await setDoc(doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', id), newAssignment);
     setCounter(counter + 1);
   };
 
-  const handleDelete = () => {
-    if (selectedAssignment) {
-      setAssignments(assignments.filter((item) => item.id !== selectedAssignment.id));
+  const handleDelete = async () => {
+    if (authUser && selectedAssignment) {
+      await deleteDoc(doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', selectedAssignment.id));
       setSelectedAssignment(null);
       setModalVisible(false);
     }
@@ -159,12 +169,11 @@ const AssignmentsScreen = () => {
     }
   };
 
-  const saveEditedTitle = () => {
-    if (selectedAssignment) {
-      const updatedAssignments = assignments.map((item) =>
-        item.id === selectedAssignment.id ? { ...item, title: editedTitle } : item
-      );
-      setAssignments(updatedAssignments);
+  const saveEditedTitle = async () => {
+    if (authUser && selectedAssignment) {
+      await updateDoc(doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', selectedAssignment.id), {
+        title: editedTitle,
+      });
       setEditModalVisible(false);
       setSelectedAssignment(null);
     }
@@ -178,17 +187,13 @@ const AssignmentsScreen = () => {
     setDetailViewVisible(true);
   };
 
-  const saveDetailContent = () => {
-    if (currentAssignment) {
-      const updatedAssignments = assignments.map((item) =>
-        item.id === currentAssignment.id ? { 
-          ...item, 
-          content: assignmentContent,
-          textAlign: textAlignment,
-          textFormat: textFormat 
-        } : item
-      );
-      setAssignments(updatedAssignments);
+ const saveDetailContent = async () => {
+    if (authUser && currentAssignment) {
+      await updateDoc(doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', currentAssignment.id), {
+        content: assignmentContent,
+        textAlign: textAlignment,
+        textFormat: textFormat,
+      });
     }
   };
   
@@ -268,26 +273,22 @@ const AssignmentsScreen = () => {
     setReminderDate(newDate);
   };
 
-  const saveReminder = () => {
-    if (selectedAssignment) {
-      // Make sure to update the date one last time before saving
-      updateReminderDate();
-      
-      const updatedAssignments = assignments.map((item) =>
-        item.id === selectedAssignment.id ? { ...item, reminderDate: reminderDate } : item
-      );
-      setAssignments(updatedAssignments);
+ const saveReminder = async () => {
+    updateReminderDate();
+    if (authUser && selectedAssignment) {
+      await updateDoc(doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', selectedAssignment.id), {
+        reminderDate: reminderDate,
+      });
       setReminderModalVisible(false);
       setSelectedAssignment(null);
     }
   };
 
-  const clearReminder = () => {
-    if (selectedAssignment) {
-      const updatedAssignments = assignments.map((item) =>
-        item.id === selectedAssignment.id ? { ...item, reminderDate: null } : item
-      );
-      setAssignments(updatedAssignments);
+ const clearReminder = async () => {
+    if (authUser && selectedAssignment) {
+      await updateDoc(doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', selectedAssignment.id), {
+        reminderDate: null,
+      });
       setReminderModalVisible(false);
       setSelectedAssignment(null);
     }
