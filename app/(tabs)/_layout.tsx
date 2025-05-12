@@ -12,10 +12,16 @@ export default function TabsLayout() {
           height: 50,
           borderTopLeftRadius: 24,
           borderTopRightRadius: 24,
-          position: 'absolute',
+          position: 'absolute', // Ensures it's overlayed
+          left: 0,
+          right: 0,
+          bottom: 0,
+          borderTopWidth: 0,
+          elevation: 0,
         },
         tabBarIcon: ({ focused, color, size }) => {
-          let iconName: any;
+          let iconName: keyof typeof Ionicons.glyphMap;
+
           switch (route.name) {
             case 'home':
               iconName = 'home';
@@ -32,7 +38,11 @@ export default function TabsLayout() {
             case 'profile':
               iconName = 'people-outline';
               break;
+            default:
+              iconName = 'ellipse-outline';
+              break;
           }
+
           return (
             <Ionicons
               name={iconName}

@@ -1,29 +1,135 @@
-import React, { useState, useCallback } from 'react';
+
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   Image,
+  Modal,
+  FlatList,
 } from 'react-native';
-import {
-  Ionicons,
-  MaterialCommunityIcons,
-  FontAwesome5,
-} from '@expo/vector-icons';
+import { Calendar, DateData } from 'react-native-calendars';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
+import { FIRESTORE_DB } from '@/FirebaseConfig';
+import { collection, onSnapshot } from 'firebase/firestore';
+
+type Assignment = {
+  id: string;
+  title: string;
+  reminderDate?: { seconds: number; nanoseconds: number };
+};
 
 export default function HomeScreen() {
   const { authUser } = useAuth();
 
-  // Local state for displayName & photoURL
-  const [displayName, setDisplayName] = useState(
-    authUser?.displayName || 'Guest'
-  );
+  // Local state for user data
+  const [displayName, setDisplayName] = useState(authUser?.displayName || 'Guest');
   const [photoURL, setPhotoURL] = useState(authUser?.photoURL || '');
 
-  // Sync from context every time this screen gains focus
+  // State for notifications and calendar
+  const [dueTasks, setDueTasks] = useState<Assignment[]>([]);
+  const [todayTasks, setTodayTasks] = useState<Assignment[]>([]);
+  const [isModalVisible, setIsModalVisible] = useState(false);
+  const [isTodayTasksModalVisible, setIsTodayTasksModalVisible] = useState(false);
+  const [markedDates, setMarkedDates] = useState<{[date: string]: any}>({});
+  const [selectedDateTasks, setSelectedDateTasks] = useState<Assignment[]>([]);
+  const [selectedDateDetailsModal, setSelectedDateDetailsModal] = useState(false);
+
+  // Fetch assignments with reminders from Firestore
+  useEffect(() => {
+    if (!authUser) return;
+
+    const userAssignmentsRef = collection(FIRESTORE_DB, 'users', authUser.uid, 'assignments');
+
+    const unsubscribe = onSnapshot(userAssignmentsRef, (snapshot) => {
+      const tasksWithReminder = snapshot.docs.map((doc) => {
+        const docData = doc.data();
+        return {
+          id: doc.id,
+          title: docData.title || 'Untitled Task',
+          reminderDate: docData.reminderDate?.seconds
+            ? { 
+                seconds: docData.reminderDate.seconds, 
+                nanoseconds: docData.reminderDate.nanoseconds 
+              } 
+            : undefined,
+        };
+      }) as Assignment[];
+
+      // Filter tasks with reminders
+      const filteredTasks = tasksWithReminder.filter((task) => task.reminderDate);
+      setDueTasks(filteredTasks);
+
+      // Find tasks due today
+      const today = new Date();
+      const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const todayEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+      
+      const tasksDueToday = filteredTasks.filter((task) => {
+        if (!task.reminderDate) return false;
+        const taskDate = new Date(task.reminderDate.seconds * 1000);
+        return taskDate >= todayStart && taskDate <= todayEnd;
+      });
+      setTodayTasks(tasksDueToday);
+
+      // Create marked dates for calendar
+      const markedDatesObj = filteredTasks.reduce((acc, task) => {
+        if (task.reminderDate) {
+          const date = new Date(task.reminderDate.seconds * 1000);
+          const dateString = date.toISOString().split('T')[0];
+          
+          // Check if the task is due (today or in the past)
+          const isDue = date <= today;
+
+          acc[dateString] = { 
+            marked: true, 
+            dotColor: isDue ? 'red' : '#6A5ACD',
+            textColor: isDue ? 'red' : undefined,
+            selected: false
+          };
+        }
+        return acc;
+      }, {} as {[date: string]: any});
+
+      setMarkedDates(markedDatesObj);
+    });
+
+    return unsubscribe;
+  }, [authUser]);
+
+  // Day press handler for calendar
+  const handleDayPress = (day: DateData) => {
+    // Find tasks for the selected date
+    const tasksOnDate = dueTasks.filter((task) => {
+      if (!task.reminderDate) return false;
+      const taskDate = new Date(task.reminderDate.seconds * 1000);
+      const selectedDate = new Date(day.dateString);
+      return taskDate.toDateString() === selectedDate.toDateString();
+    });
+
+    setSelectedDateTasks(tasksOnDate);
+    setSelectedDateDetailsModal(true);
+
+    // Update marked dates to show selected date
+    const updatedMarkedDates = { ...markedDates };
+    const today = new Date().toISOString().split('T')[0];
+    Object.keys(updatedMarkedDates).forEach(key => {
+      const isTaskDue = new Date(key) <= new Date();
+      updatedMarkedDates[key] = { 
+        ...updatedMarkedDates[key], 
+        selected: key === day.dateString,
+        // Maintain the dot and text color logic for due dates
+        dotColor: isTaskDue ? 'red' : '#6A5ACD',
+        textColor: isTaskDue ? 'red' : undefined
+      };
+    });
+    setMarkedDates(updatedMarkedDates);
+  };
+
+  // Sync context data when screen gains focus
   useFocusEffect(
     useCallback(() => {
       setDisplayName(authUser?.displayName || 'Guest');
@@ -47,56 +153,164 @@ export default function HomeScreen() {
             <Text style={styles.username}>{displayName}</Text>
           </View>
         </View>
-        <TouchableOpacity>
+        {/* Notification Button */}
+        <TouchableOpacity onPress={() => setIsModalVisible(true)}>
           <Ionicons name="notifications-outline" size={24} color="white" />
-          <View style={styles.badge} />
+          {dueTasks.length > 0 && <View style={styles.badge} />}
         </TouchableOpacity>
       </View>
 
       {/* Task Highlight */}
       <View style={styles.highlightCard}>
         <Text style={styles.highlightText}>
-          Your today’s task is almost done!
+          {todayTasks.length > 0 
+            ? `You have ${todayTasks.length} task${todayTasks.length > 1 ? 's' : ''} due today!` 
+            : 'No tasks due today'}
         </Text>
-        <TouchableOpacity style={styles.viewTaskButton}>
-          <Text style={styles.viewTaskText}>View Task</Text>
-        </TouchableOpacity>
+        {todayTasks.length > 0 && (
+          <TouchableOpacity 
+            style={styles.viewTaskButton}
+            onPress={() => setIsTodayTasksModalVisible(true)}
+          >
+            <Text style={styles.viewTaskText}>View Task</Text>
+          </TouchableOpacity>
+        )}
       </View>
 
-      {/* In Progress */}
-      <Text style={styles.sectionTitle}>
-        In <Text style={styles.bold}>Progress</Text>{' '}
-        <Text style={styles.count}>4</Text>
-      </Text>
-      <View style={styles.projectRow}>
-        <View style={styles.projectCard}>
-          <Text style={styles.projectTitle}>Office Project</Text>
-          <View style={styles.progressBar} />
-        </View>
-        <View style={styles.projectCard}>
-          <Text style={styles.projectTitle}>Personal Project</Text>
-          <View style={styles.progressBar} />
-        </View>
+      {/* Interactive Calendar */}
+      <View style={styles.calendarContainer}>
+        <Calendar
+          theme={{
+            backgroundColor: '#0D0C0F',
+            calendarBackground: '#0D0C0F',
+            textSectionTitleColor: '#FFF',
+            textSectionTitleDisabledColor: '#666',
+            selectedDayBackgroundColor: '#6A5ACD',
+            selectedDayTextColor: '#FFF',
+            todayTextColor: 'red',
+            dayTextColor: '#FFF',
+            textDisabledColor: '#444',
+            dotColor: '#6A5ACD',
+            selectedDotColor: '#FFF',
+            arrowColor: '#6A5ACD',
+          }}
+          markedDates={markedDates}
+          onDayPress={handleDayPress}
+          markingType={'multi-dot'}
+        />
       </View>
 
-      {/* Task Groups */}
-      <Text style={styles.sectionTitle}>
-        Task Groups <Text style={styles.count}>6</Text>
-      </Text>
-      <View style={styles.group}>
-        <FontAwesome5 name="briefcase" size={24} color="#6A5ACD" />
-        <View style={styles.groupInfo}>
-          <Text style={styles.groupTitle}>Office Project</Text>
-          <Text style={styles.groupSub}>23 assigned task</Text>
+      {/* Tasks Modal */}
+      <Modal visible={isModalVisible} transparent animationType="fade">
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitle}>Upcoming Tasks</Text>
+
+          {dueTasks.length > 0 ? (
+            <FlatList
+              data={dueTasks}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.taskItem}>
+                  <Text style={styles.taskTitle}>{item.title}</Text>
+                  <Text style={styles.taskDate}>
+                    Due: {new Date(item.reminderDate!.seconds * 1000).toLocaleString()}
+                  </Text>
+                </View>
+              )}
+            />
+          ) : (
+            <Text style={styles.noTasks}>No upcoming tasks</Text>
+          )}
+
+          <TouchableOpacity onPress={() => setIsModalVisible(false)} style={styles.closeButton}>
+            <Text style={styles.closeText}>Close</Text>
+          </TouchableOpacity>
         </View>
-      </View>
-      <View style={styles.group}>
-        <MaterialCommunityIcons name="notebook" size={24} color="#6A5ACD" />
-        <View style={styles.groupInfo}>
-          <Text style={styles.groupTitle}>Personal Project</Text>
-          <Text style={styles.groupSub}>30 assigned task</Text>
+      </Modal>
+
+      {/* Today's Tasks Modal */}
+      <Modal 
+        visible={isTodayTasksModalVisible} 
+        transparent 
+        animationType="slide"
+      >
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitle}>Today's Tasks</Text>
+
+          {todayTasks.length > 0 ? (
+            <FlatList
+              data={todayTasks}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.taskItem}>
+                  <Text style={styles.taskTitle}>{item.title}</Text>
+                  <Text style={styles.taskDate}>
+                    Due: {new Date(item.reminderDate!.seconds * 1000).toLocaleString()}
+                  </Text>
+                </View>
+              )}
+            />
+          ) : (
+            <Text style={styles.noTasks}>No tasks due today</Text>
+          )}
+
+          <TouchableOpacity 
+            onPress={() => setIsTodayTasksModalVisible(false)} 
+            style={styles.closeButton}
+          >
+            <Text style={styles.closeText}>Close</Text>
+          </TouchableOpacity>
         </View>
-      </View>
+      </Modal>
+
+      {/* Selected Date Tasks Modal */}
+      <Modal 
+        visible={selectedDateDetailsModal} 
+        transparent 
+        animationType="slide"
+      >
+        <View style={styles.modalContainer}>
+          <Text style={styles.modalTitle}>Tasks on Selected Date</Text>
+
+          {selectedDateTasks.length > 0 ? (
+            <FlatList
+              data={selectedDateTasks}
+              keyExtractor={(item) => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.taskItem}>
+                  <Text style={styles.taskTitle}>{item.title}</Text>
+                  <Text style={styles.taskDate}>
+                    Due: {new Date(item.reminderDate!.seconds * 1000).toLocaleString()}
+                  </Text>
+                </View>
+              )}
+            />
+          ) : (
+            <Text style={styles.noTasks}>No tasks on this date</Text>
+          )}
+
+          <TouchableOpacity 
+            onPress={() => {
+              setSelectedDateDetailsModal(false);
+              // Reset marked dates to original state
+              const resetMarkedDates = { ...markedDates };
+              Object.keys(resetMarkedDates).forEach(key => {
+                const isTaskDue = new Date(key) <= new Date();
+                resetMarkedDates[key] = { 
+                  ...resetMarkedDates[key], 
+                  selected: false,
+                  dotColor: isTaskDue ? 'red' : '#6A5ACD',
+                  textColor: isTaskDue ? 'red' : undefined
+                };
+              });
+              setMarkedDates(resetMarkedDates);
+            }} 
+            style={styles.closeButton}
+          >
+            <Text style={styles.closeText}>Close</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -167,58 +381,57 @@ const styles = StyleSheet.create({
     color: '#000',
     fontWeight: '600',
   },
-  sectionTitle: {
-    fontFamily: 'PlusJakartaSans_Regular',
-    color: '#FFF',
-    fontSize: 16,
-    marginBottom: 8,
+  calendarContainer: {
+    backgroundColor: '#0D0C0F',
+    marginTop: 20,
+    borderRadius: 16,
+    overflow: 'hidden',
   },
-  bold: {
-    fontFamily: 'PlusJakartaSans_Bold',
-  },
-  count: {
-    color: '#6A5ACD',
-    fontFamily: 'PlusJakartaSans_Bold',
-  },
-  projectRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 24,
-  },
-  projectCard: {
-    backgroundColor: '#FFF',
+  modalContainer: {
+    backgroundColor: '#1A1A1F',
+    padding: 20,
     borderRadius: 12,
-    width: '48%',
-    padding: 16,
-    justifyContent: 'space-between',
+    alignItems: 'center',
+    position: 'absolute',
+    top: '30%',
+    left: '10%',
+    width: '80%',
   },
-  projectTitle: {
+  modalTitle: {
+    color: '#FFF',
+    fontSize: 18,
     fontFamily: 'PlusJakartaSans_Bold',
     marginBottom: 10,
   },
-  progressBar: {
-    height: 4,
-    backgroundColor: 'red',
-    borderRadius: 2,
+  taskItem: {
+    backgroundColor: '#6A5ACD',
+    padding: 10,
+    borderRadius: 8,
+    marginVertical: 5,
   },
-  group: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#1A1A1F',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
-  },
-  groupInfo: {
-    marginLeft: 12,
-  },
-  groupTitle: {
+  taskTitle: {
+    fontSize: 16,
     color: '#FFF',
     fontFamily: 'PlusJakartaSans_Bold',
   },
-  groupSub: {
-    fontFamily: 'PlusJakartaSans_Regular',
+  taskDate: {
+    color: '#EDEDED',
+    fontSize: 14,
+  },
+  noTasks: {
     color: '#999',
-    fontSize: 12,
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  closeButton: {
+    marginTop: 12,
+    backgroundColor: '#EDEDED',
+    paddingVertical: 6,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+  },
+  closeText: {
+    color: '#000',
+    fontWeight: 'bold',
   },
 });

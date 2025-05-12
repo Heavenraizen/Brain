@@ -1,5 +1,6 @@
 // task.tsx (Firebase-integrated version)
 import React, { useState, useEffect } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   View,
   Text,
@@ -62,6 +63,8 @@ const AssignmentsScreen = () => {
     underline: false,
   });
   const [reminderDate, setReminderDate] = useState(new Date());
+  const insets = useSafeAreaInsets();
+
   
   // Temporary input states for date/time entries
   const [monthInput, setMonthInput] = useState('');
@@ -104,15 +107,31 @@ const AssignmentsScreen = () => {
   ];
 
   // Initialize input fields when modal opens
-   useEffect(() => {
-    if (!authUser) return;
-    const userAssignmentsRef = collection(FIRESTORE_DB, 'users', authUser.uid, 'assignments');
-    const unsubscribe = onSnapshot(userAssignmentsRef, (snapshot) => {
-      const data: Assignment[] = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })) as Assignment[];
-      setAssignments(data);
-    });
-    return unsubscribe;
-  }, [authUser]);
+useEffect(() => {
+  if (!authUser) return;
+
+  const userAssignmentsRef = collection(FIRESTORE_DB, 'users', authUser.uid, 'assignments');
+
+  const unsubscribe = onSnapshot(userAssignmentsRef, (snapshot) => {
+    const data: Assignment[] = snapshot.docs.map((doc) => {
+      const docData = doc.data();
+      return {
+        id: doc.id,
+        ...docData,
+        reminderDate: docData.reminderDate?.seconds
+          ? new Date(docData.reminderDate.seconds * 1000) // ✅ Convert Firestore timestamp to Date
+          : null,
+      };
+    }) as Assignment[];
+
+    setAssignments(data);
+  });
+
+  return unsubscribe;
+}, [authUser]);
+
+
+
 
   const handleCreate = async () => {
     if (!authUser) return;
@@ -129,13 +148,17 @@ const AssignmentsScreen = () => {
     setCounter(counter + 1);
   };
 
-  const handleDelete = async () => {
-    if (authUser && selectedAssignment) {
-      await deleteDoc(doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', selectedAssignment.id));
-      setSelectedAssignment(null);
-      setModalVisible(false);
-    }
-  };
+const handleDelete = async () => {
+  if (authUser && selectedAssignment) {
+    await deleteDoc(doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', selectedAssignment.id));
+
+    // ✅ Ensure state resets after deletion to prevent UI issues
+    setSelectedAssignment(null);
+    setCurrentAssignment(null);
+    setDetailViewVisible(false);
+    setModalVisible(false);
+  }
+};
 
   const handleEdit = () => {
     if (selectedAssignment) {
@@ -187,15 +210,23 @@ const AssignmentsScreen = () => {
     setDetailViewVisible(true);
   };
 
- const saveDetailContent = async () => {
-    if (authUser && currentAssignment) {
-      await updateDoc(doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', currentAssignment.id), {
+const saveDetailContent = async () => {
+  if (authUser && currentAssignment) {
+    const assignmentDoc = doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', currentAssignment.id);
+
+    // ✅ Prevent error if the assignment was deleted
+    try {
+      await updateDoc(assignmentDoc, {
         content: assignmentContent,
         textAlign: textAlignment,
         textFormat: textFormat,
       });
+    } catch (error) {
+      console.error('Failed to update: Assignment might be deleted', error);
     }
-  };
+  }
+};
+
   
   const handleShareAssignment = async () => {
     if (currentAssignment) {
@@ -294,55 +325,66 @@ const AssignmentsScreen = () => {
     }
   };
 
-  const formatDate = (date: Date) => {
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
+const formatDate = (date: any) => {
+  if (!date) return 'No reminder set';
 
-  const renderItem = ({ item }: { item: Assignment }) => (
-    <TouchableOpacity 
-      style={styles.card}
-      onPress={() => openDetailView(item)}
+  const parsedDate = date instanceof Date ? date : new Date(date);
+
+  if (isNaN(parsedDate.getTime())) {
+    return 'Invalid Date';
+  }
+
+  return parsedDate.toLocaleDateString('en-US', { 
+    month: 'short', 
+    day: 'numeric', 
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
+};
+
+
+
+const renderItem = ({ item }: { item: Assignment }) => (
+  <TouchableOpacity 
+    style={styles.card}
+    onPress={() => openDetailView(item)}
+  >
+    <Icon name="notifications-outline" size={20} color="white" style={styles.iconLeft} />
+    <View style={styles.cardContent}>
+      <Text style={styles.title}>{item.title}</Text>
+      {item.reminderDate && (
+        <View style={styles.reminderTag}>
+          <Icon name="alarm-outline" size={12} color="#6A5ACD" />
+          <Text style={styles.reminderText}>
+            {formatDate(item.reminderDate)}
+          </Text>
+        </View>
+      )}
+    </View>
+    <TouchableOpacity
+      style={styles.iconRight}
+      onPress={(e) => {
+        e.stopPropagation();
+        setSelectedAssignment(item);
+        setModalVisible(true);
+      }}
     >
-      <Icon name="notifications-outline" size={20} color="white" style={styles.iconLeft} />
-      <View style={styles.cardContent}>
-        <Text style={styles.title}>{item.title}</Text>
-        {item.reminderDate && (
-          <View style={styles.reminderTag}>
-            <Icon name="alarm-outline" size={12} color="#6A5ACD" />
-            <Text style={styles.reminderText}>
-              {formatDate(item.reminderDate)}
-            </Text>
-          </View>
-        )}
-      </View>
-      <TouchableOpacity
-        style={styles.iconRight}
-        onPress={(e) => {
-          e.stopPropagation();
-          setSelectedAssignment(item);
-          setModalVisible(true);
-        }}
-      >
-        <Icon name="ellipsis-vertical" size={20} color="white" />
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={styles.iconShare}
-        onPress={(e) => {
-          e.stopPropagation();
-          setSelectedAssignment(item);
-          setShareModalVisible(true);
-        }}
-      >
-        <Icon name="share-social-outline" size={20} color="white" />
-      </TouchableOpacity>
+      <Icon name="ellipsis-vertical" size={20} color="white" />
     </TouchableOpacity>
-  );
+    <TouchableOpacity
+      style={styles.iconShare}
+      onPress={(e) => {
+        e.stopPropagation();
+        setSelectedAssignment(item);
+        setShareModalVisible(true);
+      }}
+    >
+      <Icon name="share-social-outline" size={20} color="white" />
+    </TouchableOpacity>
+  </TouchableOpacity>
+);
+
 
   const renderDetailView = () => {
     if (!currentAssignment) return null;
@@ -371,7 +413,10 @@ const AssignmentsScreen = () => {
           </TouchableOpacity>
         </View>
 
-        <ScrollView style={styles.detailContent}>
+        <ScrollView
+          style={styles.detailContent}
+          contentContainerStyle={{ paddingBottom: insets.bottom + 100 }}
+        >
           <Text style={styles.detailTitle}>{currentAssignment.title}</Text>
           
           {currentAssignment.reminderDate && (
@@ -474,7 +519,9 @@ const AssignmentsScreen = () => {
             
             {/* Floating Share Button */}
             <TouchableOpacity 
-              style={styles.floatingShareButton}
+              style={[styles.floatingShareButton,
+                { bottom: insets.bottom + 20 },
+              ]}
               onPress={handleShareAssignment}
             >
               <Icon name="share-social-outline" size={24} color="#FFF" />
