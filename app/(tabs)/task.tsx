@@ -1,4 +1,3 @@
-import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,11 +9,10 @@ import {
   TextInput,
   Image,
   ScrollView,
-  Share,
   Dimensions,
-  Platform,
-  Button,
+  Alert,
 } from 'react-native';
+import { useState, useEffect } from 'react';
 import Icon from 'react-native-vector-icons/Ionicons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/AuthContext';
@@ -26,7 +24,16 @@ import {
   setDoc,
   updateDoc,
   deleteDoc,
+  getDoc,
+  getDocs,
+  query,
+  where,
+  arrayUnion,
 } from 'firebase/firestore';
+import Toast from 'react-native-root-toast';
+
+const TAB_BAR_HEIGHT = 35; // Match your _layout.tsx
+const TAB_BAR_MARGIN = TAB_BAR_HEIGHT + 16; // Add extra space if needed
 
 type Assignment = {
   id: string;
@@ -39,6 +46,12 @@ type Assignment = {
     underline: boolean;
   };
   reminderDate?: Date | null;
+  collaborators: string[]; // Array of user IDs
+  lastModified: {
+    by: string;
+    at: Date;
+  };
+  createdBy: string; // <-- Add this line
 };
 
 const AssignmentsScreen = () => {
@@ -79,80 +92,135 @@ const AssignmentsScreen = () => {
   // Get screen dimensions
   const windowWidth = Dimensions.get('window').width;
 
-  const people = [
-    {
-      id: '1',
-      name: 'Rhovic Delas Armas',
-      avatarUrl: 'https://randomuser.me/api/portraits/men/32.jpg',
-    },
-    {
-      id: '2',
-      name: 'Stephen De Vera',
-      avatarUrl: 'https://randomuser.me/api/portraits/women/45.jpg',
-    },
-    {
-      id: '3',
-      name: 'Marcelo Miguel',
-      avatarUrl: 'https://randomuser.me/api/portraits/women/68.jpg',
-    },
-    {
-      id: '4',
-      name: 'Add People',
-      avatarUrl: 'https://img.icons8.com/ios-filled/50/add-user-group-man-man.png',
-    },
-  ];
-
   // Initialize input fields when modal opens
-useEffect(() => {
-  if (!authUser) return;
-
-  const userAssignmentsRef = collection(FIRESTORE_DB, 'users', authUser.uid, 'assignments');
-
-  const unsubscribe = onSnapshot(userAssignmentsRef, (snapshot) => {
-    const data: Assignment[] = snapshot.docs.map((doc) => {
-      const docData = doc.data();
-      return {
-        id: doc.id,
-        ...docData,
-        reminderDate: docData.reminderDate?.seconds
-          ? new Date(docData.reminderDate.seconds * 1000) // ✅ Convert Firestore timestamp to Date
-          : null,
-      };
-    }) as Assignment[];
-
-    setAssignments(data);
-  });
-
-  return unsubscribe;
-}, [authUser]);
-
-
-
-
-  const handleCreate = async () => {
+  useEffect(() => {
     if (!authUser) return;
-    const id = Date.now().toString();
-    const newAssignment: Assignment = {
-      id,
-      title: `New Assignment ${counter}`,
-      content: '',
-      textAlign: 'left',
-      textFormat: { bold: false, italic: false, underline: false },
-      reminderDate: null,
-    };
-    await setDoc(doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', id), newAssignment);
-    setCounter(counter + 1);
+
+    const assignmentsRef = collection(FIRESTORE_DB, 'assignments');
+    const q = query(
+      assignmentsRef,
+      where('collaborators', 'array-contains', authUser.uid)
+    );
+
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        try {
+          const data: Assignment[] = snapshot.docs.map((doc) => ({
+            id: doc.id,
+            ...doc.data(),
+            reminderDate: doc.data().reminderDate?.toDate() || null,
+          })) as Assignment[];
+          setAssignments(data);
+        } catch (error) {
+          console.error('Error processing assignments:', error);
+        }
+      },
+      (error) => {
+        console.error('Assignments listener error:', error);
+      }
+    );
+
+    return () => unsubscribe();
+  }, [authUser]);
+
+useEffect(() => {
+  if (!authUser || !currentAssignment?.id) return;
+
+  const assignmentRef = doc(FIRESTORE_DB, 'assignments', currentAssignment.id);
+  
+  const unsubscribe = onSnapshot(
+    assignmentRef,
+    (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        setAssignmentContent(data.content || '');
+        setTextAlignment(data.textAlign || 'left');
+        setTextFormat(data.textFormat || { bold: false, italic: false, underline: false });
+        
+        if (data.lastModified?.by && data.lastModified?.at) {
+          const timestamp = data.lastModified.at instanceof Date 
+            ? data.lastModified.at 
+            : data.lastModified.at.toDate();
+
+          if (data.lastModified.by !== authUser.uid) {
+            Toast.show(
+              `Updated by another collaborator at ${timestamp.toLocaleTimeString()}`,
+              {
+                duration: Toast.durations.SHORT,
+                position: Toast.positions.BOTTOM,
+                shadow: true,
+                animation: true,
+                hideOnPress: true,
+                backgroundColor: '#6A5ACD',
+                textColor: '#fff',
+              }
+            );
+          }
+        }
+
+        setCurrentAssignment(prev => ({
+          ...prev!,
+          ...data,
+          id: doc.id,
+          reminderDate: data.reminderDate?.toDate() || null
+        }));
+      }
+    },
+    (error) => {
+      console.error('Assignment listener error:', error);
+      setDetailViewVisible(false);
+    }
+  );
+
+  return () => unsubscribe();
+}, [authUser, currentAssignment?.id]);
+
+const handleCreate = async () => {
+  if (!authUser) return;
+  const id = Date.now().toString();
+  
+  const newAssignment = {
+    id,
+    title: `New Assignment ${counter}`,
+    content: '',
+    textAlign: 'left',
+    textFormat: { bold: false, italic: false, underline: false },
+    reminderDate: null,
+    createdBy: authUser.uid,
+    collaborators: [authUser.uid],
+    lastModified: {
+      by: authUser.uid,
+      at: new Date()
+    }
   };
+
+  await setDoc(doc(FIRESTORE_DB, 'assignments', id), newAssignment);
+  setCounter(counter + 1);
+};
 
 const handleDelete = async () => {
   if (authUser && selectedAssignment) {
-    await deleteDoc(doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', selectedAssignment.id));
+    // Check if the current user is NOT the owner (createdBy) of the assignment
+    if (selectedAssignment.createdBy && selectedAssignment.createdBy !== authUser.uid) {
+      Alert.alert(
+        'Permission Denied',
+        "You can't delete this task because you are not the owner."
+      );
+      return;
+    }
 
-    // ✅ Ensure state resets after deletion to prevent UI issues
-    setSelectedAssignment(null);
-    setCurrentAssignment(null);
-    setDetailViewVisible(false);
-    setModalVisible(false);
+    try {
+      await deleteDoc(doc(FIRESTORE_DB, 'assignments', selectedAssignment.id));
+
+      setSelectedAssignment(null);
+      setCurrentAssignment(null);
+      setDetailViewVisible(false);
+      setModalVisible(false);
+    } catch (error) {
+      console.error('Delete error:', error);
+      Alert.alert('Error', 'Failed to delete assignment');
+    }
   }
 };
 
@@ -188,15 +256,35 @@ const handleDelete = async () => {
     }
   };
 
-  const saveEditedTitle = async () => {
-    if (authUser && selectedAssignment) {
-      await updateDoc(doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', selectedAssignment.id), {
+const saveEditedTitle = async () => {
+  if (authUser && selectedAssignment) {
+    try {
+      const assignmentRef = doc(FIRESTORE_DB, 'assignments', selectedAssignment.id);
+      
+      await updateDoc(assignmentRef, {
         title: editedTitle,
+        lastModified: {
+          by: authUser.uid,
+          at: new Date()
+        }
       });
+
       setEditModalVisible(false);
       setSelectedAssignment(null);
+
+      // Update current assignment if in detail view
+      if (currentAssignment && currentAssignment.id === selectedAssignment.id) {
+        setCurrentAssignment({
+          ...currentAssignment,
+          title: editedTitle
+        });
+      }
+    } catch (error) {
+      console.error('Error updating title:', error);
+      Alert.alert('Error', 'Failed to update title');
     }
-  };
+  }
+};
 
   const openDetailView = (assignment: Assignment) => {
     setCurrentAssignment(assignment);
@@ -206,44 +294,93 @@ const handleDelete = async () => {
     setDetailViewVisible(true);
   };
 
-const saveDetailContent = async () => {
-  if (authUser && currentAssignment) {
-    const assignmentDoc = doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', currentAssignment.id);
+const saveDetailContent = async (content: string) => {
+  if (!authUser || !currentAssignment) return;
 
-    // ✅ Prevent error if the assignment was deleted
-    try {
-      await updateDoc(assignmentDoc, {
-        content: assignmentContent,
-        textAlign: textAlignment,
-        textFormat: textFormat,
-      });
-    } catch (error) {
-      console.error('Failed to update: Assignment might be deleted', error);
-    }
+  try {
+    const assignmentRef = doc(FIRESTORE_DB, 'assignments', currentAssignment.id);
+    
+    await updateDoc(assignmentRef, {
+      content,
+      textAlign: textAlignment,
+      textFormat: textFormat,
+      lastModified: {
+        by: authUser.uid,
+        at: new Date()
+      }
+    });
+  } catch (error) {
+    console.error('Failed to update:', error);
+    Alert.alert('Error', 'Failed to save changes');
   }
 };
 
   
   const handleShareAssignment = async () => {
-    if (currentAssignment) {
-      try {
-        const result = await Share.share({
-          title: currentAssignment.title,
-          message: `${currentAssignment.title}\n\n${assignmentContent}`,
-        });
-        
-        if (result.action === Share.sharedAction) {
-          if (result.activityType) {
-            console.log(`Shared with activity type: ${result.activityType}`);
-          } else {
-            console.log('Shared successfully');
+    if (!currentAssignment || !authUser) return;
+
+    try {
+      Alert.prompt(
+        "Share Assignment",
+        "Enter recipient's email address",
+        [
+          {
+            text: "Cancel",
+            style: "cancel"
+          },
+          {
+            text: "Share",
+            onPress: async (email) => {
+              if (!email) return;
+              
+              try {
+                // Find user by email
+                const usersRef = collection(FIRESTORE_DB, 'users');
+                const q = query(usersRef, where('email', '==', email));
+                const querySnapshot = await getDocs(q);
+
+                if (querySnapshot.empty) {
+                  Alert.alert('Error', 'User not found. Please check the email address.');
+                  return;
+                }
+
+                const targetUser = querySnapshot.docs[0];
+
+                // Update assignment with new collaborator
+                const assignmentRef = doc(FIRESTORE_DB, 'assignments', currentAssignment.id);
+                await updateDoc(assignmentRef, {
+                  collaborators: arrayUnion(targetUser.id)
+                });
+
+                Alert.alert(
+                  'Success',
+                  `Assignment shared with ${email}`
+                );
+              } catch (error) {
+                console.error('Share error:', error);
+                Alert.alert('Error', 'Failed to share assignment');
+              }
+            }
           }
-        } else if (result.action === Share.dismissedAction) {
-          console.log('Share dismissed');
-        }
-      } catch (error) {
-        console.error(error);
-      }
+        ],
+        'plain-text'
+      );
+    } catch (error) {
+      console.error('Share prompt error:', error);
+      Alert.alert('Error', 'Failed to open share dialog');
+    }
+  };
+
+  const handleShare = async (emailOrName: string) => {
+    if (!currentAssignment || !authUser) return;
+    
+    try {
+      await shareWithUser(currentAssignment.id, emailOrName);
+      setShareModalVisible(false);
+      Alert.alert('Success', `Assignment shared with ${emailOrName}`);
+    } catch (error) {
+      console.error('Share error:', error);
+      Alert.alert('Error', 'Failed to share assignment');
     }
   };
 
@@ -303,21 +440,31 @@ const saveDetailContent = async () => {
  const saveReminder = async () => {
     updateReminderDate();
     if (authUser && selectedAssignment) {
-      await updateDoc(doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', selectedAssignment.id), {
-        reminderDate: reminderDate,
-      });
-      setReminderModalVisible(false);
-      setSelectedAssignment(null);
+      try {
+        await updateDoc(doc(FIRESTORE_DB, 'assignments', selectedAssignment.id), {
+          reminderDate: reminderDate,
+        });
+        setReminderModalVisible(false);
+        setSelectedAssignment(null);
+      } catch (error) {
+        console.error('Save reminder error:', error);
+        Alert.alert('Error', 'Failed to save reminder');
+      }
     }
   };
 
  const clearReminder = async () => {
     if (authUser && selectedAssignment) {
-      await updateDoc(doc(FIRESTORE_DB, 'users', authUser.uid, 'assignments', selectedAssignment.id), {
-        reminderDate: null,
-      });
-      setReminderModalVisible(false);
-      setSelectedAssignment(null);
+      try {
+        await updateDoc(doc(FIRESTORE_DB, 'assignments', selectedAssignment.id), {
+          reminderDate: null,
+        });
+        setReminderModalVisible(false);
+        setSelectedAssignment(null);
+      } catch (error) {
+        console.error('Clear reminder error:', error);
+        Alert.alert('Error', 'Failed to clear reminder');
+      }
     }
   };
 
@@ -339,7 +486,208 @@ const formatDate = (date: any) => {
   });
 };
 
+const shareWithUser = async (assignmentId: string, email: string) => {
+  if (!authUser) return;
 
+  try {
+    // Find user by email
+    const usersRef = collection(FIRESTORE_DB, 'users');
+    const q = query(usersRef, where('email', '==', email));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+      Alert.alert('Error', 'User not found');
+      return;
+    }
+
+    const targetUser = querySnapshot.docs[0];
+    
+    // Don't allow sharing with self
+    if (targetUser.id === authUser.uid) {
+      Alert.alert('Error', 'Cannot share with yourself');
+      return;
+    }
+
+    const assignmentRef = doc(FIRESTORE_DB, 'assignments', assignmentId);
+    const assignmentSnap = await getDoc(assignmentRef);
+
+    if (!assignmentSnap.exists()) {
+      Alert.alert('Error', 'Assignment not found');
+      return;
+    }
+
+    // Check if user is already a collaborator
+    const assignmentData = assignmentSnap.data();
+    if (assignmentData.collaborators?.includes(targetUser.id)) {
+      Alert.alert('Error', 'User is already a collaborator');
+      return;
+    }
+
+    // Update assignment with new collaborator
+    await updateDoc(assignmentRef, {
+      collaborators: arrayUnion(targetUser.id),
+      lastModified: {
+        by: authUser.uid,
+        at: new Date()
+      }
+    });
+  } catch (error) {
+    console.error('Share error:', error);
+    Alert.alert('Error', 'Failed to share assignment');
+  }
+};
+
+type CollaboratorItemProps = {
+  userId: string;
+};
+
+const CollaboratorItem = ({ userId }: CollaboratorItemProps) => {
+  const [userData, setUserData] = useState<{ displayName?: string; photoURL?: string } | null>(null);
+
+  useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const userDoc = await getDoc(doc(FIRESTORE_DB, 'users', userId));
+        if (userDoc.exists()) {
+          setUserData(userDoc.data());
+        }
+      } catch (error) {
+        console.error('Error fetching user data:', error);
+      }
+    };
+
+    fetchUserData();
+  }, [userId]);
+
+  if (!userData) return null;
+
+  return (
+    <View style={styles.collaboratorItem}>
+      <Image
+        source={
+          userData.photoURL
+            ? { uri: userData.photoURL }
+            : require('@/assets/images/profile.webp')
+        }
+        style={styles.collaboratorAvatar}
+      />
+      <Text style={styles.collaboratorName}>{userData.displayName || 'Anonymous'}</Text>
+    </View>
+  );
+};
+
+type CollaboratorsListProps = {
+  collaborators: string[];
+};
+
+const CollaboratorsList = ({ collaborators }: CollaboratorsListProps) => {
+  return (
+    <View style={styles.collaboratorsContainer}>
+      <Text style={styles.collaboratorsTitle}>Collaborators</Text>
+      {collaborators?.map((userId) => (
+        <CollaboratorItem key={userId} userId={userId} />
+      ))}
+      <TouchableOpacity 
+        style={styles.addCollaboratorButton}
+        onPress={() => {
+          Alert.prompt(
+            "Add Collaborator",
+            "Enter user's email",
+            [
+              {
+                text: "Cancel",
+                style: "cancel"
+              },
+              {
+                text: "Share",
+                onPress: (email) => {
+                  if (email && currentAssignment) {
+                    shareWithUser(currentAssignment.id, email);
+                  }
+                }
+              }
+            ]
+          );
+        }}
+      >
+        <Icon name="person-add-outline" size={20} color="#6A5ACD" />
+        <Text style={styles.addCollaboratorText}>Add Collaborator</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+const ShareModal = ({
+  visible,
+  onClose,
+  onShare,
+  currentAssignment
+}: {
+  visible: boolean;
+  onClose: () => void;
+  onShare: (email: string) => void;
+  currentAssignment: Assignment | null;
+}) => {
+  const [email, setEmail] = useState('');
+
+  // Reset email input when modal opens/closes
+  useEffect(() => {
+    if (!visible) setEmail('');
+  }, [visible]);
+
+  return (
+    <Modal
+      transparent={true}
+      visible={visible}
+      animationType="fade"
+      onRequestClose={onClose}
+    >
+      <Pressable style={styles.modalBackground} onPress={onClose}>
+        <View style={styles.shareModalContainer}>
+          <Text style={styles.shareModalTitle}>Share Assignment</Text>
+          <Text style={styles.shareModalSubtitle}>
+            Share "{currentAssignment?.title || 'Assignment'}" with others
+          </Text>
+          <TextInput
+            style={styles.shareModalInput}
+            placeholder="Enter email address"
+            placeholderTextColor="#aaa"
+            value={email}
+            onChangeText={setEmail}
+            keyboardType="email-address"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+          <View style={styles.shareModalButtons}>
+            <TouchableOpacity
+              style={[styles.shareModalButton, styles.cancelButton]}
+              onPress={onClose}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.shareModalButton,
+                styles.shareModalButtonMain,
+                { opacity: email.trim() ? 1 : 0.5 }
+              ]}
+              onPress={() => {
+                if (email.trim()) {
+                  onShare(email.trim());
+                  setEmail('');
+                }
+              }}
+              disabled={!email.trim()}
+            >
+              <Icon name="share-social-outline" size={20} color="#FFF" />
+              <Text style={styles.shareButtonText}>Share</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Pressable>
+    </Modal>
+  );
+};
 
 const renderItem = ({ item }: { item: Assignment }) => (
   <TouchableOpacity 
@@ -349,12 +697,17 @@ const renderItem = ({ item }: { item: Assignment }) => (
     <Icon name="notifications-outline" size={20} color="white" style={styles.iconLeft} />
     <View style={styles.cardContent}>
       <Text style={styles.title}>{item.title}</Text>
-      {item.reminderDate && (
+      {item.reminderDate ? (
         <View style={styles.reminderTag}>
           <Icon name="alarm-outline" size={12} color="#6A5ACD" />
           <Text style={styles.reminderText}>
             {formatDate(item.reminderDate)}
           </Text>
+        </View>
+      ) : (
+        <View style={styles.reminderTag}>
+          <Icon name="alarm-outline" size={12} color="#6A5ACD" style={{ opacity: 0.5 }} />
+          <Text style={[styles.reminderText, { color: '#888' }]}>No reminder set</Text>
         </View>
       )}
     </View>
@@ -381,6 +734,11 @@ const renderItem = ({ item }: { item: Assignment }) => (
   </TouchableOpacity>
 );
 
+// First, add a new function to filter out the current user from collaborators list
+const filterCollaborators = (collaborators: string[]) => {
+  if (!authUser) return [];
+  return collaborators.filter(id => id !== authUser.uid);
+};
 
   const renderDetailView = () => {
     if (!currentAssignment) return null;
@@ -391,7 +749,7 @@ const renderItem = ({ item }: { item: Assignment }) => (
           <TouchableOpacity
             style={styles.backButton}
             onPress={() => {
-              saveDetailContent();
+              saveDetailContent(assignmentContent);
               setDetailViewVisible(false);
             }}
           >
@@ -500,6 +858,7 @@ const renderItem = ({ item }: { item: Assignment }) => (
                   fontWeight: textFormat.bold ? 'bold' : 'normal',
                   fontStyle: textFormat.italic ? 'italic' : 'normal',
                   textDecorationLine: textFormat.underline ? 'underline' : 'none',
+                  marginBottom: TAB_BAR_MARGIN, // Add this line
                 }
               ]}
               value={assignmentContent}
@@ -513,7 +872,7 @@ const renderItem = ({ item }: { item: Assignment }) => (
             {/* Floating Share Button */}
             <TouchableOpacity 
               style={styles.floatingShareButton}
-              onPress={handleShareAssignment}
+              onPress={() => setShareModalVisible(true)}
             >
               <Icon name="share-social-outline" size={24} color="#FFF" />
             </TouchableOpacity>
@@ -570,6 +929,20 @@ const renderItem = ({ item }: { item: Assignment }) => (
             <TouchableOpacity style={styles.modalOption} onPress={handleDelete}>
               <Text style={[styles.modalText, { color: 'red' }]}>Delete</Text>
             </TouchableOpacity>
+            
+            <View style={styles.modalDivider} />
+            <Text style={styles.modalSectionTitle}>Collaborators</Text>
+            <ScrollView style={{ maxHeight: 200 }}>
+              {selectedAssignment?.collaborators && filterCollaborators(selectedAssignment.collaborators).length > 0 ? (
+                filterCollaborators(selectedAssignment.collaborators).map((userId) => (
+                  <CollaboratorItem key={userId} userId={userId} />
+                ))
+              ) : (
+                <Text style={[styles.modalText, { fontSize: 14, color: '#aaa' }]}>
+                  No collaborators yet
+                </Text>
+              )}
+            </ScrollView>
           </View>
         </Pressable>
       </Modal>
@@ -709,29 +1082,12 @@ const renderItem = ({ item }: { item: Assignment }) => (
       </Modal>
 
       {/* Share Modal */}
-      <Modal
-        transparent={true}
+      <ShareModal
         visible={shareModalVisible}
-        animationType="fade"
-        onRequestClose={() => setShareModalVisible(false)}
-      >
-        <Pressable style={styles.modalBackground} onPress={() => setShareModalVisible(false)}>
-          <View style={styles.shareCard}>
-            <Text style={styles.shareTitle}>Share Assignment</Text>
-
-            {people.map((person) => (
-              <View key={person.id} style={styles.personRow}>
-                <Image source={{ uri: person.avatarUrl }} style={styles.avatar} />
-                <Text style={styles.personName}>{person.name}</Text>
-              </View>
-            ))}
-
-            <TouchableOpacity style={styles.copyButton}>
-              <Icon name="copy-outline" size={20} color="white" />
-            </TouchableOpacity>
-          </View>
-        </Pressable>
-      </Modal>
+        onClose={() => setShareModalVisible(false)}
+        onShare={handleShare}
+        currentAssignment={currentAssignment}
+      />
     </SafeAreaView>
   );
 };
@@ -821,6 +1177,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 10,
     width: 280,
+    maxHeight: '80%', // Add this to make it scrollable if needed
   },
   modalOption: {
     paddingVertical: 10,
@@ -1061,7 +1418,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   contentEditSection: {
-    marginBottom: 20,
+    marginBottom: TAB_BAR_MARGIN, // Add margin to avoid overlap with tab bar
     flex: 1,
     position: 'relative',
     minHeight: 600,
@@ -1077,7 +1434,7 @@ const styles = StyleSheet.create({
   },
   floatingShareButton: {
     position: 'absolute',
-    bottom: 20,
+    bottom: TAB_BAR_MARGIN + 15, // Place above the tab bar
     right: 20,
     backgroundColor: '#6A5ACD',
     width: 50,
@@ -1090,7 +1447,142 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 3.84,
-  }
+  },
+  collaboratorsContainer: {
+    marginTop: 16,
+    padding: 16,
+    backgroundColor: '#1f1f1f',
+    borderRadius: 8,
+  },
+  collaboratorsTitle: {
+    color: 'white',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  addCollaboratorButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    borderWidth: 1,
+    borderColor: '#6A5ACD',
+    borderRadius: 4,
+    marginTop: 8,
+  },
+  addCollaboratorText: {
+    color: '#6A5ACD',
+    marginLeft: 8,
+  },
+  collaboratorItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 8,
+    marginVertical: 4,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 6,
+  },
+  collaboratorAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  collaboratorName: {
+    color: '#fff',
+    fontSize: 13,
+  },
+  shareButton: {
+    backgroundColor: '#6A5ACD',
+    padding: 12,
+    borderRadius: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 16,
+  },
+  shareModalButtonMain: {
+    backgroundColor: '#6A5ACD',
+    marginLeft: 8,
+  },
+  shareNotification: {
+    backgroundColor: '#1f1f1f',
+    padding: 16,
+    borderRadius: 8,
+    marginBottom: 16,
+    borderLeftWidth: 4,
+    borderLeftColor: '#6A5ACD',
+  },
+  shareNotificationText: {
+    color: 'white',
+    fontSize: 14,
+  },
+  shareModalContainer: {
+    backgroundColor: '#1f1f1f',
+    borderRadius: 16,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+    maxHeight: '80%',
+  },
+  shareModalTitle: {
+    color: 'white',
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 8,
+  },
+  shareModalSubtitle: {
+    color: '#aaa',
+    fontSize: 14,
+    marginBottom: 20,
+  },
+  shareModalInput: {
+    backgroundColor: '#333',
+    color: 'white',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+    fontSize: 16,
+  },
+  shareModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 20,
+  },
+  shareModalButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    minWidth: 110, // Ensures both buttons have the same width
+    minHeight: 48,
+  },
+  cancelButton: {
+    backgroundColor: '#333',
+    marginRight: 8,
+  },
+  cancelButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  shareButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginLeft: 6,
+  },
+  modalDivider: {
+    height: 1,
+    backgroundColor: '#333',
+    marginVertical: 10,
+  },
+  modalSectionTitle: {
+    color: '#aaa',
+    fontSize: 14,
+    marginBottom: 8,
+    marginTop: 4,
+  },
 });
 
 export default AssignmentsScreen;

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
@@ -14,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/context/AuthContext';
 import { useFocusEffect } from '@react-navigation/native';
 import { FIRESTORE_DB } from '@/FirebaseConfig';
-import { collection, onSnapshot } from 'firebase/firestore';
+import { collection, onSnapshot, query, where } from 'firebase/firestore';
 
 type Assignment = {
   id: string;
@@ -37,14 +36,18 @@ export default function HomeScreen() {
   const [markedDates, setMarkedDates] = useState<{[date: string]: any}>({});
   const [selectedDateTasks, setSelectedDateTasks] = useState<Assignment[]>([]);
   const [selectedDateDetailsModal, setSelectedDateDetailsModal] = useState(false);
+  const [groupedTasks, setGroupedTasks] = useState<{ [date: string]: Assignment[] }>({});
+  const [notificationSeen, setNotificationSeen] = useState(false);
+  const todayString = new Date().toISOString().split('T')[0];
 
   // Fetch assignments with reminders from Firestore
   useEffect(() => {
     if (!authUser) return;
 
-    const userAssignmentsRef = collection(FIRESTORE_DB, 'users', authUser.uid, 'assignments');
+    const assignmentsRef = collection(FIRESTORE_DB, 'assignments');
+    const q = query(assignmentsRef, where('collaborators', 'array-contains', authUser.uid));
 
-    const unsubscribe = onSnapshot(userAssignmentsRef, (snapshot) => {
+    const unsubscribe = onSnapshot(q, (snapshot) => {
       const tasksWithReminder = snapshot.docs.map((doc) => {
         const docData = doc.data();
         return {
@@ -62,6 +65,7 @@ export default function HomeScreen() {
       // Filter tasks with reminders
       const filteredTasks = tasksWithReminder.filter((task) => task.reminderDate);
       setDueTasks(filteredTasks);
+      if (filteredTasks.length > 0) setNotificationSeen(false);
 
       // Find tasks due today
       const today = new Date();
@@ -75,22 +79,40 @@ export default function HomeScreen() {
       });
       setTodayTasks(tasksDueToday);
 
-      // Create marked dates for calendar
-      const markedDatesObj = filteredTasks.reduce((acc, task) => {
+      // Group tasks by date (fix timezone bug)
+      const grouped = filteredTasks.reduce((acc, task) => {
         if (task.reminderDate) {
           const date = new Date(task.reminderDate.seconds * 1000);
-          const dateString = date.toISOString().split('T')[0];
-          
-          // Check if the task is due (today or in the past)
-          const isDue = date <= today;
-
-          acc[dateString] = { 
-            marked: true, 
-            dotColor: isDue ? 'red' : '#6A5ACD',
-            textColor: isDue ? 'red' : undefined,
-            selected: false
-          };
+          const dateString = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+          if (!acc[dateString]) acc[dateString] = [];
+          acc[dateString].push(task);
         }
+        return acc;
+      }, {} as { [date: string]: Assignment[] });
+
+      setGroupedTasks(grouped);
+
+      const todayString = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+      const markedDatesObj = Object.entries(grouped).reduce((acc, [dateString, tasks]) => {
+        const dateObj = new Date(dateString);
+        let selectedColor = '#6A5ACD'; // Default: purple for upcoming
+
+        if (dateString === todayString) {
+          selectedColor = '#FFD600'; // Yellow for today
+        } else if (dateObj < today) {
+          selectedColor = '#B71C1C'; // Red for overdue
+        }
+
+        acc[dateString] = {
+          marked: true,
+          dots: tasks.map(task => ({
+            key: task.id,
+            color: selectedColor,
+          })),
+          selected: true,
+          selectedColor,
+        };
         return acc;
       }, {} as {[date: string]: any});
 
@@ -102,31 +124,14 @@ export default function HomeScreen() {
 
   // Day press handler for calendar
   const handleDayPress = (day: DateData) => {
-    // Find tasks for the selected date
-    const tasksOnDate = dueTasks.filter((task) => {
-      if (!task.reminderDate) return false;
-      const taskDate = new Date(task.reminderDate.seconds * 1000);
-      const selectedDate = new Date(day.dateString);
-      return taskDate.toDateString() === selectedDate.toDateString();
-    });
+    const dateString = day.dateString; // Already in 'YYYY-MM-DD' format
 
+    // Find tasks for the selected date
+    const tasksOnDate = groupedTasks[dateString] || [];
     setSelectedDateTasks(tasksOnDate);
     setSelectedDateDetailsModal(true);
 
-    // Update marked dates to show selected date
-    const updatedMarkedDates = { ...markedDates };
-    const today = new Date().toISOString().split('T')[0];
-    Object.keys(updatedMarkedDates).forEach(key => {
-      const isTaskDue = new Date(key) <= new Date();
-      updatedMarkedDates[key] = { 
-        ...updatedMarkedDates[key], 
-        selected: key === day.dateString,
-        // Maintain the dot and text color logic for due dates
-        dotColor: isTaskDue ? 'red' : '#6A5ACD',
-        textColor: isTaskDue ? 'red' : undefined
-      };
-    });
-    setMarkedDates(updatedMarkedDates);
+    // No need to change markedDates, keep all outlined
   };
 
   // Sync context data when screen gains focus
@@ -154,9 +159,12 @@ export default function HomeScreen() {
           </View>
         </View>
         {/* Notification Button */}
-        <TouchableOpacity onPress={() => setIsModalVisible(true)}>
+        <TouchableOpacity onPress={() => {
+          setIsModalVisible(true);
+          setNotificationSeen(true); // Mark as seen when opening modal
+        }}>
           <Ionicons name="notifications-outline" size={24} color="white" />
-          {dueTasks.length > 0 && <View style={styles.badge} />}
+          {dueTasks.length > 0 && !notificationSeen && <View style={styles.badge} />}
         </TouchableOpacity>
       </View>
 
@@ -197,6 +205,47 @@ export default function HomeScreen() {
           markedDates={markedDates}
           onDayPress={handleDayPress}
           markingType={'multi-dot'}
+          dayComponent={({
+            date,
+            state,
+          }: {
+            date: { dateString: string; day: number };
+            state: string;
+          }) => {
+            const dateString = date.dateString;
+            const taskCount = groupedTasks[dateString]?.length || 0;
+            const bgColor = markedDates[dateString]?.selectedColor || 'transparent';
+
+            return (
+              <TouchableOpacity
+                onPress={() => handleDayPress({ dateString } as DateData)}
+                disabled={state === 'disabled'}
+                style={{ alignItems: 'center' }}
+              >
+                <Text style={{
+                  color: state === 'disabled' ? '#444' : '#FFF',
+                  fontWeight: dateString === todayString ? 'bold' : 'normal',
+                  backgroundColor: bgColor,
+                  borderRadius: 16,
+                  padding: 4,
+                  minWidth: 32,
+                  textAlign: 'center'
+                }}>
+                  {date.day}
+                </Text>
+                {taskCount > 0 && (
+                  <View style={{
+                    backgroundColor: bgColor,
+                    borderRadius: 8,
+                    paddingHorizontal: 6,
+                    marginTop: 2,
+                  }}>
+                    <Text style={{ color: '#FFF', fontSize: 10 }}>{taskCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+            );
+          }}
         />
       </View>
 
@@ -222,7 +271,10 @@ export default function HomeScreen() {
             <Text style={styles.noTasks}>No upcoming tasks</Text>
           )}
 
-          <TouchableOpacity onPress={() => setIsModalVisible(false)} style={styles.closeButton}>
+          <TouchableOpacity
+            onPress={() => setIsModalVisible(false)}
+            style={styles.closeButton}
+          >
             <Text style={styles.closeText}>Close</Text>
           </TouchableOpacity>
         </View>
